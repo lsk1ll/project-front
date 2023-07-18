@@ -1,11 +1,347 @@
 <html>
 <head>
     <title>RPG</title>
-    <script src=https://code.jquery.com/jquery-3.6.0.min.js></script>
-    <link href="/css/my.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="css/my.css" rel="stylesheet">
 </head>
 <body>
 <h1>RPG admin panel</h1>
+<label for="account-per-page">Count per page:</label>
+<select id="account-per-page">
+    <option value="3">3</option>
+    <option value="7">7</option>
+    <option value="14">14</option>
+    <option value="20">20</option>
+</select>
 
+<table id="table">
+    <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Title</th>
+        <th>Race</th>
+        <th>Profession</th>
+        <th>Level</th>
+        <th>Birthday</th>
+        <th>Banned</th>
+        <th>Edit</th>
+        <th>Delete</th>
+    </tr>
+</table>
+
+<div class="pagination">
+    <div class="buttons-container"></div>
+</div>
+<hr>
+<h2>Create New Account</h2>
+
+<div class="create-form">
+    <label for="name">Name:</label>
+    <input type="text" id="name" required minlength="1" maxlength="12"><br>
+
+    <label for="title">Title:</label>
+    <input type="text" id="title" required minlength="1" maxlength="30"><br>
+
+    <label for="race">Race:</label>
+    <select id="race" required>
+        <option value="HUMAN">HUMAN</option>
+        <option value="DWARF">DWARF</option>
+        <option value="ELF">ELF</option>
+        <option value="GIANT">GIANT</option>
+        <option value="ORC">ORC</option>
+        <option value="TROLL">TROLL</option>
+        <option value="HOBBIT">HOBBIT</option>
+    </select><br>
+
+    <label for="profession">Profession:</label>
+    <select id="profession" required>
+        <option value="WARRIOR">WARRIOR</option>
+        <option value="ROGUE">ROGUE</option>
+        <option value="SORCERER">SORCERER</option>
+        <option value="CLERIC">CLERIC</option>
+        <option value="PALADIN">PALADIN</option>
+        <option value="NAZGUL">NAZGUL</option>
+        <option value="WARLOCK">WARLOCK</option>
+        <option value="DRUID">DRUID</option>
+    </select><br>
+
+    <label for="level">Level:</label>
+    <input type="number" id="level" required min="0" max="100"><br>
+
+    <label for="birthday">Birthday:</label>
+    <input type="date" id="birthday" required><br>
+
+    <button id="createButton">Create</button>
+</div>
+
+<script>
+    $(document).ready(function () {
+        const countPage = $("#account-per-page");
+        const table = $("#table");
+        const buttonsContainer = $(".buttons-container");
+
+        let currentPage = 1;
+
+        function updatePagination(pageNumber = currentPage) {
+            buttonsContainer.empty();
+
+            const pageNumberForServer = pageNumber - 1;
+            $.get(`/rest/players?pageNumber=${pageNumberForServer}&pageSize=${countPage.val()}`, function (data) {
+                table.find("tr:gt(0)").remove();
+                for (let i = 0; i < data.length; i++) {
+                    let player = data[i];
+                    let row = $("<tr>").attr("data-id", player.id);
+                    row.append($("<td>").text(player.id));
+                    row.append($("<td>").text(player.name));
+                    row.append($("<td>").text(player.title));
+                    row.append($("<td>").text(player.race));
+                    row.append($("<td>").text(player.profession));
+                    row.append($("<td>").text(player.level));
+                    const dateObject = new Date(player.birthday);
+                    const day = String(dateObject.getDate()).padStart(2, '0');
+                    const month = String(dateObject.getMonth() + 1).padStart(2, '0');
+                    const year = dateObject.getFullYear();
+                    const formattedBirthday = `${day}/${month}/${year}`;
+                    row.append($("<td>").text(formattedBirthday));
+                    row.append($("<td>").text(player.banned));
+
+                    let editIcon = $("<img>").attr("src", "../img/edit.png").height(40).width(41).click(function () {
+                        editAccount(player.id);
+                    });
+
+                    let deleteIcon = $("<img>").attr("src", "../img/delete.png").height(40).width(40).click(function () {
+                        deleteAccount(player.id);
+                    });
+                    let editButton = $("<td>").append(editIcon);
+                    let deleteButton = $("<td>").append(deleteIcon);
+
+                    row.append(editButton);
+                    row.append(deleteButton);
+
+                    table.append(row);
+                }
+            });
+
+            $.get("/rest/players/count", function (data) {
+                for (let i = 1; i <= Math.ceil(data / countPage.val()); i++) {
+                    const button = $("<button>").text(i);
+                    button.on("click", function () {
+                        updatePagination(i);
+                    });
+                    if (i === pageNumber) {
+                        button.addClass("active");
+                    }
+                    buttonsContainer.append(button);
+                }
+            });
+
+            currentPage = pageNumber;
+        }
+
+        function editAccount(id) {
+            const row = document.querySelector(`#table tr[data-id="${id}"]`);
+
+            if (row) {
+                const editButton = $(row).find("td:eq(8)");
+                const deleteButton = $(row).find("td:eq(9)");
+
+                if (!row.isEditing) {
+                    editButton.find("img").attr("src", "../img/save.png");
+                    deleteButton.closest('td').addClass('hide-cell');
+
+                    const name = $(row).find("td:eq(1)").text();
+                    const title = $(row).find("td:eq(2)").text();
+                    const race = $(row).find("td:eq(3)").text();
+                    const profession = $(row).find("td:eq(4)").text();
+                    const level = $(row).find("td:eq(5)").text();
+                    const birthday = $(row).find("td:eq(6)").text();
+                    const banned = $(row).find("td:eq(7)").text() === "true";
+
+                    $(row).find("td:eq(1)").html(`<input type="text" class="edit-name" value="${name}">`);
+                    $(row).find("td:eq(2)").html(`<input type="text" class="edit-title" value="${title}">`);
+                    $(row).find("td:eq(3)").html('<select class="edit-race"></select>');
+                    $(row).find("td:eq(4)").html('<select class="edit-profession"></select>');
+                    $(row).find("td:eq(7)").html('<select class="edit-banned"></select>');
+
+                    const raceOptions = ["HUMAN", "DWARF", "ELF", "GIANT", "ORC", "TROLL", "HOBBIT"];
+                    const professionOptions = ["WARRIOR", "ROGUE", "SORCERER", "CLERIC", "PALADIN", "NAZGUL", "WARLOCK", "DRUID"];
+                    const bannedOptions = [true, false];
+
+                    const raceSelect = $(row).find(".edit-race");
+                    raceOptions.forEach(option => {
+                        const selected = option === race ? "selected" : "";
+                        raceSelect.append(`<option value="${option}" ${selected}>${option}</option>`);
+                    });
+
+                    const professionSelect = $(row).find(".edit-profession");
+                    professionOptions.forEach(option => {
+                        const selected = option === profession ? "selected" : "";
+                        professionSelect.append(`<option value="${option}" ${selected}>${option}</option>`);
+                    });
+
+                    const bannedSelect = $(row).find(".edit-banned");
+                    bannedOptions.forEach(option => {
+                        const selected = option === banned ? "selected" : "";
+                        bannedSelect.append(`<option value="${option}" ${selected}>${option}</option>`);
+                    });
+
+                    row.isEditing = true;
+                } else {
+                    const updatedName = $(row).find(".edit-name").val();
+                    const updatedTitle = $(row).find(".edit-title").val();
+                    const updatedRace = $(row).find(".edit-race").val();
+                    const updatedProfession = $(row).find(".edit-profession").val();
+                    const updatedBanned = $(row).find(".edit-banned").val() === "true";
+
+                    const endpoint = `/rest/players/${id}`;
+                    const updatedData = {
+                        name: updatedName,
+                        title: updatedTitle,
+                        race: updatedRace,
+                        profession: updatedProfession,
+                        banned: updatedBanned,
+                    };
+
+                    $.ajax({
+                        url: endpoint,
+                        type: "POST",
+                        data: JSON.stringify(updatedData),
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json",
+                        success: function () {
+                            editButton.find("img").attr("src", "../img/edit.png");
+                            deleteButton.closest('td').removeClass('hide-cell');
+                            row.isEditing = false;
+                            updatePagination(currentPage);
+                        },
+                        error: function (error) {
+                            console.error("Error saving the account:", error);
+                        },
+                    });
+                }
+            } else {
+                console.log("Row with id", id, "not found");
+            }
+        }
+
+        function deleteAccount(id) {
+            $.ajax({
+                url: `/rest/players/${id}`,
+                type: "DELETE",
+                success: function () {
+                    updatePagination();
+                },
+                error: function (error) {
+                    console.error("Error deleting the account:", error);
+                },
+            });
+        }
+
+        function createAccount() {
+            const name = $("#name").val();
+            const title = $("#title").val();
+            const race = $("#race").val();
+            const profession = $("#profession").val();
+            const level = $("#level").val();
+            const birthday = $("#birthday").val();
+
+            if (!name || !title || !race || !profession || !level || !birthday) {
+                console.error("Please fill in all the required fields.");
+                return;
+            }
+
+            if (name.length > 12 || title.length > 30) {
+                console.error("Name and title should have appropriate lengths (not exceeding 12 and 30 characters, respectively).");
+                return;
+            }
+
+            const levelValue = parseInt(level);
+
+            if (isNaN(levelValue) || levelValue < 0 || levelValue > 100) {
+                console.error("Level must be a number within the range of 0 to 100.");
+                return;
+            }
+
+            const dateObject = new Date(birthday);
+            const timestamp = dateObject.getTime();
+
+            if (isNaN(timestamp) || timestamp < 0) {
+                console.error("Invalid birthday date.");
+                return;
+            }
+
+            const newAccountData = {
+                name: name,
+                title: title,
+                race: race,
+                profession: profession,
+                level: levelValue,
+                birthday: timestamp,
+            };
+
+            $.ajax({
+                url: "/rest/players",
+                type: "POST",
+                data: JSON.stringify(newAccountData),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (data) {
+                    $("#name").val("");
+                    $("#title").val("");
+                    $("#race").val("");
+                    $("#profession").val("");
+                    $("#level").val("");
+                    $("#birthday").val("");
+                    $("#banned").val("false");
+
+                    const newRow = $("<tr>").attr("data-id", data.id);
+                    newRow.append($("<td>").text(data.id));
+                    newRow.append($("<td>").text(data.name));
+                    newRow.append($("<td>").text(data.title));
+                    newRow.append($("<td>").text(data.race));
+                    newRow.append($("<td>").text(data.profession));
+                    newRow.append($("<td>").text(data.level));
+                    const dateObject = new Date(data.birthday);
+                    const day = String(dateObject.getDate()).padStart(2, '0');
+                    const month = String(dateObject.getMonth() + 1).padStart(2, '0');
+                    const year = dateObject.getFullYear();
+                    const formattedBirthday = `${day}/${month}/${year}`;
+                    newRow.append($("<td>").text(formattedBirthday));
+                    newRow.append($("<td>").text(data.banned));
+
+                    let editIcon = $("<img>").attr("src", "../img/edit.png").height(40).width(41).click(function () {
+                        editAccount(data.id);
+                    });
+
+                    let deleteIcon = $("<img>").attr("src", "../img/delete.png").height(40).width(40).click(function () {
+                        deleteAccount(data.id);
+                    });
+                    let editButton = $("<td>").append(editIcon);
+                    let deleteButton = $("<td>").append(deleteIcon);
+
+                    newRow.append(editButton);
+                    newRow.append(deleteButton);
+
+                    table.append(newRow);
+
+                    updatePagination(currentPage);
+                },
+                error: function (error) {
+                    console.error("Error creating the character:", error);
+                },
+            });
+        }
+
+        $("#createButton").on("click", function () {
+            createAccount();
+        });
+
+        countPage.on("change", function () {
+            updatePagination();
+        });
+
+        updatePagination();
+    });
+</script>
 </body>
 </html>
